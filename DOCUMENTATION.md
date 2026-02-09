@@ -34,6 +34,28 @@ cd Aivideodetector
 pip install -r requirements.txt
 ```
 
+3. **Download the MediaPipe Pose Landmarker model:**
+
+The application requires a MediaPipe pose landmarker model file. You have two options:
+
+**Option A - Auto-download (recommended):**
+```bash
+python download_models.py
+```
+
+**Option B - Manual download:**
+1. Download the model from: [MediaPipe Pose Landmarker](https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task)
+2. Create a `models` directory in the project root
+3. Place the downloaded file as `models/pose_landmarker_lite.task`
+
+**Option C - Use wget:**
+```bash
+mkdir -p models
+wget -O models/pose_landmarker_lite.task "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task"
+```
+
+**Note:** If you encounter download issues, you may need to use a browser to download the model file manually.
+
 ## Usage
 
 ### Basic Usage

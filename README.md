@@ -22,7 +22,12 @@ cd Aivideodetector
 
 # Install dependencies
 pip install -r requirements.txt
+
+# Download MediaPipe model (required)
+python download_models.py
 ```
+
+**Note:** The model download may require manual intervention in some environments. See [DOCUMENTATION.md](DOCUMENTATION.md) for alternative download methods.
 
 ### Basic Usage
 

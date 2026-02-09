@@ -40,3 +40,4 @@ test_videos/
 *.mp4
 *.mkv
 *.avi
+models/

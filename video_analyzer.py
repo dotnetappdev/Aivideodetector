@@ -8,38 +8,85 @@ Analyzes video files to detect and analyze human subjects including:
 """
 
 import cv2
-import mediapipe as mp
 import numpy as np
 from typing import Dict, List, Tuple, Optional
 import os
+from mediapipe.tasks import python
+from mediapipe.tasks.python import vision
+from mediapipe import Image, ImageFormat
 
 
 class VideoAnalyzer:
     """Main class for analyzing video files and detecting human attributes."""
     
-    def __init__(self):
-        """Initialize the video analyzer with MediaPipe models."""
-        # Initialize MediaPipe Pose for person detection and height estimation
-        self.mp_pose = mp.solutions.pose
-        self.mp_drawing = mp.solutions.drawing_utils
-        self.mp_drawing_styles = mp.solutions.drawing_styles
-        self.pose = self.mp_pose.Pose(
-            static_image_mode=False,
-            model_complexity=2,
-            enable_segmentation=True,
-            min_detection_confidence=0.5,
+    def __init__(self, model_path: Optional[str] = None):
+        """Initialize the video analyzer with MediaPipe models.
+        
+        Args:
+            model_path: Optional path to the pose landmarker model file.
+                       If not provided, will use default location or download it.
+        """
+        # Get model path
+        if model_path is None:
+            model_path = os.path.join(os.path.dirname(__file__), "models", "pose_landmarker_lite.task")
+        
+        # Check if model exists, if not download it
+        if not os.path.exists(model_path):
+            print(f"Model not found at {model_path}")
+            print("Attempting to download model...")
+            self._download_model(model_path)
+        
+        # Initialize MediaPipe Pose Landmarker for person detection and height estimation
+        base_options = python.BaseOptions(model_asset_path=model_path)
+        options = vision.PoseLandmarkerOptions(
+            base_options=base_options,
+            running_mode=vision.RunningMode.VIDEO,
+            num_poses=1,
+            min_pose_detection_confidence=0.5,
+            min_pose_presence_confidence=0.5,
             min_tracking_confidence=0.5
         )
+        self.pose_landmarker = vision.PoseLandmarker.create_from_options(options)
         
-        # Initialize MediaPipe Face Detection for facial features
-        self.mp_face_detection = mp.solutions.face_detection
-        self.face_detection = self.mp_face_detection.FaceDetection(
-            model_selection=1,
-            min_detection_confidence=0.5
-        )
+        # Store landmark connections for drawing
+        self.pose_connections = vision.PoseLandmarksConnections.POSE_CONNECTIONS
         
         # Reference height for calibration (in cm)
         self.reference_height_cm = 170.0
+        
+        # Frame counter for video processing
+        self.frame_timestamp_ms = 0
+    
+    def _download_model(self, model_path: str):
+        """Download the pose landmarker model if it doesn't exist."""
+        import urllib.request
+        
+        model_url = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task"
+        
+        try:
+            os.makedirs(os.path.dirname(model_path), exist_ok=True)
+            print(f"Downloading model from {model_url}...")
+            urllib.request.urlretrieve(model_url, model_path)
+            print(f"Model downloaded successfully to {model_path}")
+        except Exception as e:
+            print(f"\nError downloading model: {e}")
+            print("\n" + "=" * 70)
+            print("MODEL DOWNLOAD REQUIRED")
+            print("=" * 70)
+            print("\nThe MediaPipe Pose Landmarker model could not be downloaded automatically.")
+            print("Please download it manually using one of these methods:\n")
+            print("Method 1 - Download script:")
+            print("  python download_models.py\n")
+            print("Method 2 - Browser download:")
+            print("  1. Open this URL in your browser:")
+            print(f"     {model_url}")
+            print("  2. Save the file as:")
+            print(f"     {model_path}\n")
+            print("Method 3 - Command line (if available):")
+            print(f"  mkdir -p {os.path.dirname(model_path)}")
+            print(f"  # Download using your browser, then move file to models/\n")
+            print("=" * 70)
+            raise RuntimeError(f"Failed to download model. Please download manually (see instructions above).")
         
     def open_video(self, video_path: str) -> cv2.VideoCapture:
         """
@@ -64,30 +111,28 @@ class VideoAnalyzer:
         
         return cap
     
-    def estimate_height(self, pose_landmarks, image_height: int) -> float:
+    def estimate_height(self, pose_landmarks_list, image_height: int) -> float:
         """
         Estimate the height of a person from pose landmarks.
         
         Args:
-            pose_landmarks: MediaPipe pose landmarks
+            pose_landmarks_list: List of pose landmarks from MediaPipe
             image_height: Height of the image in pixels
             
         Returns:
             Estimated height in centimeters
         """
-        if not pose_landmarks:
+        if not pose_landmarks_list or len(pose_landmarks_list) == 0:
             return 0.0
         
+        # Get first person's landmarks
+        landmarks = pose_landmarks_list[0]
+        
         # Get key points for height calculation
-        # Use nose (0) to heel (31, 32) or ankle (27, 28)
-        landmarks = pose_landmarks.landmark
-        
-        # Get head position (nose)
-        nose = landmarks[self.mp_pose.PoseLandmark.NOSE.value]
-        
-        # Get foot positions (average of both feet)
-        left_ankle = landmarks[self.mp_pose.PoseLandmark.LEFT_ANKLE.value]
-        right_ankle = landmarks[self.mp_pose.PoseLandmark.RIGHT_ANKLE.value]
+        # Use nose (0) to ankle (27, 28)
+        nose = landmarks[0]  # PoseLandmark.NOSE
+        left_ankle = landmarks[27]  # PoseLandmark.LEFT_ANKLE
+        right_ankle = landmarks[28]  # PoseLandmark.RIGHT_ANKLE
         
         # Calculate pixel height
         head_y = nose.y * image_height
@@ -100,25 +145,25 @@ class VideoAnalyzer:
         
         return estimated_height
     
-    def detect_hair_color(self, image: np.ndarray, pose_landmarks) -> str:
+    def detect_hair_color(self, image: np.ndarray, pose_landmarks_list) -> str:
         """
         Detect the dominant hair color from the head region.
         
         Args:
             image: Input image
-            pose_landmarks: MediaPipe pose landmarks
+            pose_landmarks_list: List of pose landmarks from MediaPipe
             
         Returns:
             Detected hair color as string
         """
-        if not pose_landmarks:
+        if not pose_landmarks_list or len(pose_landmarks_list) == 0:
             return "Unknown"
         
-        landmarks = pose_landmarks.landmark
+        landmarks = pose_landmarks_list[0]
         h, w = image.shape[:2]
         
-        # Get head region (nose and ears)
-        nose = landmarks[self.mp_pose.PoseLandmark.NOSE.value]
+        # Get head region (nose)
+        nose = landmarks[0]  # PoseLandmark.NOSE
         
         # Define region above nose for hair
         x = int(nose.x * w)
@@ -144,26 +189,26 @@ class VideoAnalyzer:
         
         return self._classify_color(avg_color, color_type="hair")
     
-    def detect_eye_color(self, image: np.ndarray, pose_landmarks) -> str:
+    def detect_eye_color(self, image: np.ndarray, pose_landmarks_list) -> str:
         """
         Detect the eye color from facial landmarks.
         
         Args:
             image: Input image
-            pose_landmarks: MediaPipe pose landmarks
+            pose_landmarks_list: List of pose landmarks from MediaPipe
             
         Returns:
             Detected eye color as string
         """
-        if not pose_landmarks:
+        if not pose_landmarks_list or len(pose_landmarks_list) == 0:
             return "Unknown"
         
-        landmarks = pose_landmarks.landmark
+        landmarks = pose_landmarks_list[0]
         h, w = image.shape[:2]
         
         # Get eye positions
-        left_eye = landmarks[self.mp_pose.PoseLandmark.LEFT_EYE.value]
-        right_eye = landmarks[self.mp_pose.PoseLandmark.RIGHT_EYE.value]
+        left_eye = landmarks[2]  # PoseLandmark.LEFT_EYE
+        right_eye = landmarks[5]  # PoseLandmark.RIGHT_EYE
         
         # Extract eye regions
         eye_colors = []
@@ -190,28 +235,28 @@ class VideoAnalyzer:
         avg_eye_color = np.mean(eye_colors, axis=0).astype(int)
         return self._classify_color(avg_eye_color, color_type="eye")
     
-    def detect_clothing_colors(self, image: np.ndarray, pose_landmarks) -> List[str]:
+    def detect_clothing_colors(self, image: np.ndarray, pose_landmarks_list) -> List[str]:
         """
         Detect the dominant clothing colors.
         
         Args:
             image: Input image
-            pose_landmarks: MediaPipe pose landmarks
+            pose_landmarks_list: List of pose landmarks from MediaPipe
             
         Returns:
             List of detected clothing colors
         """
-        if not pose_landmarks:
+        if not pose_landmarks_list or len(pose_landmarks_list) == 0:
             return ["Unknown"]
         
-        landmarks = pose_landmarks.landmark
+        landmarks = pose_landmarks_list[0]
         h, w = image.shape[:2]
         
         # Get torso region (shoulders to hips)
-        left_shoulder = landmarks[self.mp_pose.PoseLandmark.LEFT_SHOULDER.value]
-        right_shoulder = landmarks[self.mp_pose.PoseLandmark.RIGHT_SHOULDER.value]
-        left_hip = landmarks[self.mp_pose.PoseLandmark.LEFT_HIP.value]
-        right_hip = landmarks[self.mp_pose.PoseLandmark.RIGHT_HIP.value]
+        left_shoulder = landmarks[11]  # PoseLandmark.LEFT_SHOULDER
+        right_shoulder = landmarks[12]  # PoseLandmark.RIGHT_SHOULDER
+        left_hip = landmarks[23]  # PoseLandmark.LEFT_HIP
+        right_hip = landmarks[24]  # PoseLandmark.RIGHT_HIP
         
         # Define torso region
         x1 = int(min(left_shoulder.x, left_hip.x) * w)
@@ -337,23 +382,25 @@ class VideoAnalyzer:
             avg_color = np.mean(pixels, axis=0).astype(int)
             return [self._classify_color(avg_color)]
     
-    def process_frame(self, frame: np.ndarray, show_overlay: bool = True) -> Tuple[np.ndarray, Dict]:
+    def process_frame(self, frame: np.ndarray, show_overlay: bool = True, frame_timestamp_ms: int = 0) -> Tuple[np.ndarray, Dict]:
         """
         Process a single video frame and extract all attributes.
         
         Args:
             frame: Input video frame
             show_overlay: Whether to draw overlays on the frame
+            frame_timestamp_ms: Timestamp of the frame in milliseconds
             
         Returns:
             Tuple of (processed_frame, analysis_results)
         """
-        # Convert to RGB for MediaPipe
-        image_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         h, w = frame.shape[:2]
         
-        # Process with MediaPipe Pose
-        pose_results = self.pose.process(image_rgb)
+        # Convert frame to MediaPipe Image
+        mp_image = Image(image_format=ImageFormat.SRGB, data=cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+        
+        # Process with MediaPipe Pose Landmarker
+        pose_results = self.pose_landmarker.detect_for_video(mp_image, frame_timestamp_ms)
         
         analysis_results = {
             "height_cm": 0.0,
@@ -365,7 +412,7 @@ class VideoAnalyzer:
         
         output_frame = frame.copy()
         
-        if pose_results.pose_landmarks:
+        if pose_results.pose_landmarks and len(pose_results.pose_landmarks) > 0:
             analysis_results["person_detected"] = True
             
             # Estimate height
@@ -379,12 +426,26 @@ class VideoAnalyzer:
             
             if show_overlay:
                 # Draw pose landmarks
-                self.mp_drawing.draw_landmarks(
-                    output_frame,
-                    pose_results.pose_landmarks,
-                    self.mp_pose.POSE_CONNECTIONS,
-                    landmark_drawing_spec=self.mp_drawing_styles.get_default_pose_landmarks_style()
-                )
+                pose_landmarks = pose_results.pose_landmarks[0]
+                
+                # Draw connections
+                for connection in self.pose_connections:
+                    start_idx = connection.start
+                    end_idx = connection.end
+                    
+                    if start_idx < len(pose_landmarks) and end_idx < len(pose_landmarks):
+                        start_landmark = pose_landmarks[start_idx]
+                        end_landmark = pose_landmarks[end_idx]
+                        
+                        start_point = (int(start_landmark.x * w), int(start_landmark.y * h))
+                        end_point = (int(end_landmark.x * w), int(end_landmark.y * h))
+                        
+                        cv2.line(output_frame, start_point, end_point, (0, 255, 0), 2)
+                
+                # Draw landmarks
+                for landmark in pose_landmarks:
+                    landmark_point = (int(landmark.x * w), int(landmark.y * h))
+                    cv2.circle(output_frame, landmark_point, 3, (0, 0, 255), -1)
                 
                 # Draw analysis results as text overlay
                 y_offset = 30
@@ -435,6 +496,8 @@ class VideoAnalyzer:
         
         all_results = []
         frame_count = 0
+        frame_timestamp_ms = 0
+        ms_per_frame = 1000 // fps if fps > 0 else 33  # Default to ~30fps if fps is 0
         
         try:
             while cap.isOpened():
@@ -443,7 +506,7 @@ class VideoAnalyzer:
                     break
                 
                 # Process frame
-                processed_frame, results = self.process_frame(frame, show_overlay=True)
+                processed_frame, results = self.process_frame(frame, show_overlay=True, frame_timestamp_ms=frame_timestamp_ms)
                 all_results.append(results)
                 
                 # Write to output video
@@ -458,8 +521,10 @@ class VideoAnalyzer:
                         break
                 
                 frame_count += 1
+                frame_timestamp_ms += ms_per_frame
+                
                 if frame_count % 30 == 0:
-                    print(f"Processed {frame_count}/{total_frames} frames ({frame_count*100//total_frames}%)")
+                    print(f"Processed {frame_count}/{total_frames} frames ({frame_count*100//total_frames if total_frames > 0 else 0}%)")
         
         finally:
             cap.release()
@@ -473,7 +538,5 @@ class VideoAnalyzer:
     
     def __del__(self):
         """Cleanup resources."""
-        if hasattr(self, 'pose'):
-            self.pose.close()
-        if hasattr(self, 'face_detection'):
-            self.face_detection.close()
+        if hasattr(self, 'pose_landmarker'):
+            self.pose_landmarker.close()
