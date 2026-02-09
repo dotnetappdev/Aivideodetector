@@ -76,6 +76,11 @@ Supported formats: MP4, MKV, AVI, MOV, and most common video formats
     if args.output:
         print(f"Output video: {args.output}")
     print(f"Real-time display: {'No' if args.no_display else 'Yes'}")
+    if not args.no_display:
+        print("\n💡 Real-time viewing controls:")
+        print("   - Press 'q' to quit playback")
+        print("   - Press 'p' to pause/resume")
+        print("   - The video will appear in a separate window")
     print("=" * 60)
     print()
     

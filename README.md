@@ -32,19 +32,35 @@ python download_models.py
 ### Basic Usage
 
 ```bash
-# Process a video with real-time display
+# Process a video with real-time display (default)
 python main.py your_video.mp4
+
+# Real-time viewer with enhanced controls
+python realtime_viewer.py your_video.mp4
+
+# Live webcam viewer
+python webcam_viewer.py
 
 # Process and save output
 python main.py input.mkv -o output.mp4
 
-# Process large files without display
+# Process large files without display (faster)
 python main.py large_video.mp4 --no-display -o analyzed.mp4
 ```
 
+### Real-Time Viewing Controls
+
+When viewing videos in real-time:
+- **Press 'q'** to quit playback
+- **Press 'p'** to pause/resume
+- The video appears in a separate window with AI overlays
+
 ## 📖 Documentation
 
-For detailed documentation, see [DOCUMENTATION.md](DOCUMENTATION.md)
+- **[REALTIME_VIEWING.md](REALTIME_VIEWING.md)** - Complete guide to real-time video viewing
+- **[DOCUMENTATION.md](DOCUMENTATION.md)** - Full technical documentation
+- **[SETUP.md](SETUP.md)** - Installation instructions
+- **[QUICK_REFERENCE.md](QUICK_REFERENCE.md)** - Command reference
 
 ## 🛠️ Requirements
 

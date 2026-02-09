@@ -487,6 +487,10 @@ class VideoAnalyzer:
         
         print(f"Processing video: {video_path}")
         print(f"Resolution: {width}x{height}, FPS: {fps}, Total frames: {total_frames}")
+        if display_realtime:
+            print("\n🎬 Real-time display active - Video window will appear shortly...")
+            print("   Press 'q' to quit | Press 'p' to pause/resume")
+        print()
         
         # Initialize video writer if output path is specified
         writer = None
@@ -498,6 +502,7 @@ class VideoAnalyzer:
         frame_count = 0
         frame_timestamp_ms = 0
         ms_per_frame = 1000 // fps if fps > 0 else 33  # Default to ~30fps if fps is 0
+        paused = False
         
         try:
             while cap.isOpened():
@@ -516,9 +521,18 @@ class VideoAnalyzer:
                 # Display in real-time
                 if display_realtime:
                     cv2.imshow('AI Video Detector', processed_frame)
-                    if cv2.waitKey(1) & 0xFF == ord('q'):
-                        print("Processing interrupted by user")
+                    
+                    # Handle keyboard input
+                    key = cv2.waitKey(1 if not paused else 0) & 0xFF
+                    if key == ord('q'):
+                        print("\nProcessing interrupted by user")
                         break
+                    elif key == ord('p'):
+                        paused = not paused
+                        if paused:
+                            print("\n⏸️  Paused - Press 'p' to resume or 'q' to quit")
+                        else:
+                            print("▶️  Resumed")
                 
                 frame_count += 1
                 frame_timestamp_ms += ms_per_frame
