@@ -38,11 +38,30 @@ def test_basic_functionality():
         print(f"   - Hair: {results['hair_color']}")
         print(f"   - Eyes: {results['eye_color']}")
         print(f"   - Clothing: {results['clothing_colors']}")
+        
+        # Validate expected values for no person
+        if results['person_detected']:
+            print("   ✗ Expected no person detected in empty frame")
+            return False
+        if results['height_cm'] != 0.0:
+            print("   ✗ Expected height to be 0.0 when no person detected")
+            return False
+        if results['hair_color'] != "Unknown":
+            print("   ✗ Expected hair_color to be 'Unknown' when no person detected")
+            return False
     except Exception as e:
         print(f"   ✗ Processing failed: {e}")
         import traceback
         traceback.print_exc()
         return False
+    
+    # Note about testing with actual person detection
+    print("\n   Note: To test person detection accuracy:")
+    print("   - Process a video with a known person")
+    print("   - Validate height estimation (compare to known height)")
+    print("   - Verify hair color detection accuracy")
+    print("   - Verify eye color detection accuracy")
+    print("   - Verify clothing color detection accuracy")
     
     # Test opening a non-existent video (should fail gracefully)
     print("\n4. Testing error handling...")

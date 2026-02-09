@@ -111,7 +111,7 @@ class VideoAnalyzer:
         
         return cap
     
-    def estimate_height(self, pose_landmarks_list, image_height: int) -> float:
+    def estimate_height(self, pose_landmarks_list: List, image_height: int) -> float:
         """
         Estimate the height of a person from pose landmarks.
         
@@ -145,7 +145,7 @@ class VideoAnalyzer:
         
         return estimated_height
     
-    def detect_hair_color(self, image: np.ndarray, pose_landmarks_list) -> str:
+    def detect_hair_color(self, image: np.ndarray, pose_landmarks_list: List) -> str:
         """
         Detect the dominant hair color from the head region.
         
@@ -189,7 +189,7 @@ class VideoAnalyzer:
         
         return self._classify_color(avg_color, color_type="hair")
     
-    def detect_eye_color(self, image: np.ndarray, pose_landmarks_list) -> str:
+    def detect_eye_color(self, image: np.ndarray, pose_landmarks_list: List) -> str:
         """
         Detect the eye color from facial landmarks.
         
@@ -235,7 +235,7 @@ class VideoAnalyzer:
         avg_eye_color = np.mean(eye_colors, axis=0).astype(int)
         return self._classify_color(avg_eye_color, color_type="eye")
     
-    def detect_clothing_colors(self, image: np.ndarray, pose_landmarks_list) -> List[str]:
+    def detect_clothing_colors(self, image: np.ndarray, pose_landmarks_list: List) -> List[str]:
         """
         Detect the dominant clothing colors.
         
@@ -377,8 +377,8 @@ class VideoAnalyzer:
                 colors.append(color_name)
             
             return colors
-        except:
-            # Fallback: use simple average
+        except Exception:
+            # Fallback: use simple average if K-means fails
             avg_color = np.mean(pixels, axis=0).astype(int)
             return [self._classify_color(avg_color)]
     
